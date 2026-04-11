@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "subcap"
+version = "0.1.0"
+description = "Burn precisely-timed captions into video using forced alignment."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "stable-ts>=2.16",
+]
+
+[project.scripts]
+subcap = "subcap.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/subcap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
