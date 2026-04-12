@@ -47,6 +47,7 @@ def encode(
         "-vf", f"ass={ass_path}",
         *_QUALITY[quality]["codec"],
         "-c:a", "copy",
+        "-movflags", "+faststart",
         "-y",
         str(output_path),
     ]
