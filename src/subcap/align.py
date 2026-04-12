@@ -8,8 +8,18 @@ from pathlib import Path
 from subcap.types import SubtitleEntry, Word
 
 
-def align_transcript(video_path: str | Path, transcript: str) -> list[Word]:
-    import stable_whisper  # lazy import — keeps module load fast
+def align_transcript(
+    video_path: str | Path,
+    transcript: str,
+    language: str = "en",
+) -> list[Word]:
+    """Force-align a known transcript to a video's audio track.
+
+    Uses wav2vec2 via WhisperX for phoneme-level alignment. The transcript
+    text is treated as ground truth — each word is mapped to its exact
+    position in the audio.
+    """
+    import whisperx  # lazy import — keeps module load fast
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav_path = tmp.name
@@ -29,13 +39,29 @@ def align_transcript(video_path: str | Path, transcript: str) -> list[Word]:
             check=True,
         )
 
-        model = stable_whisper.load_model("medium")
-        result = model.align(wav_path, transcript, language="en")
+        audio = whisperx.load_audio(wav_path)
+        duration = len(audio) / 16000
+
+        normalized = re.sub(r"\s+", " ", transcript).strip()
+        segments = [{"text": normalized, "start": 0.0, "end": duration}]
+
+        model, metadata = whisperx.load_align_model(
+            language_code=language, device="cpu"
+        )
+        result = whisperx.align(
+            segments, model, metadata, audio, device="cpu",
+            return_char_alignments=False,
+        )
 
         words: list[Word] = []
-        for segment in result.segments:
-            for w in segment.words:
-                words.append(Word(text=w.word, start=w.start, end=w.end))
+        for segment in result["segments"]:
+            for w in segment.get("words", []):
+                if "start" in w and "end" in w:
+                    words.append(Word(
+                        text=w["word"],
+                        start=float(w["start"]),
+                        end=float(w["end"]),
+                    ))
         return words
     finally:
         Path(wav_path).unlink(missing_ok=True)
