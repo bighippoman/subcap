@@ -1,8 +1,19 @@
 # subcap
 
-Burn precisely-timed captions into video. Give it a video and a transcript — it handles alignment, styling, and encoding.
+A one-command captioning pipeline built around [WhisperX](https://github.com/m-bain/whisperX)'s forced alignment. Give it a video and a transcript — it handles audio extraction, alignment, subtitle segmentation, styling, and burn-in encoding.
 
-Unlike speech-to-text tools that guess both *what* is said and *when*, subcap uses **forced alignment**: you provide the transcript, and wav2vec2 maps each word to its exact position in the audio waveform. The result is phoneme-level timing accuracy — no drift, no guessing, no cascading errors.
+## Why this exists
+
+WhisperX solves the hard problem: using wav2vec2 to map each word of a known transcript to its exact position in audio. But WhisperX outputs raw word timestamps — turning those into readable, styled, burned-in captions is still a non-trivial amount of glue code per video.
+
+subcap is that glue code, packaged as a CLI:
+
+- **Subtitle segmentation** — groups aligned words into readable chunks with sentence-boundary breaks, line wrapping, duration caps, and proper gaps between cues
+- **Styled ASS generation** — four presets (modern, outline, minimal, bold), auto-adapted for landscape vs portrait video
+- **ffmpeg burn-in** — re-encodes to H.264, H.265, or ProRes with a single `--quality` flag
+- **SRT bypass** — if you already have timed subtitles, it skips alignment and goes straight to styling + burn-in
+
+Without subcap, getting from *video + transcript* to *video with burned-in captions* requires chaining WhisperX, writing your own segmentation logic, hand-crafting ASS files, and orchestrating ffmpeg. subcap is `subcap video.mov transcript.txt`.
 
 ## Install
 
@@ -64,15 +75,15 @@ subcap <video> <transcript> [options]
 | `high` | H.265 | Smaller files |
 | `studio` | ProRes 422 | Editing, broadcast |
 
-## How it works
+## Pipeline
 
-1. Extracts audio from the video
-2. Runs phoneme-level forced alignment via [WhisperX](https://github.com/m-bain/whisperX) (wav2vec2) to map each word of your transcript to its exact position in the audio
-3. Segments words into readable subtitle chunks, breaking at sentence boundaries
-4. Generates styled ASS subtitles adapted to the video's aspect ratio
-5. Burns captions into the video via ffmpeg
+1. **Extract audio** — mono 16 kHz WAV via ffmpeg
+2. **Force-align** (WhisperX / wav2vec2) — map each word of the transcript to its exact position in the audio
+3. **Segment** (subcap) — group words into readable subtitle cues, break at sentence boundaries, wrap long lines, enforce min/max display duration, insert gaps
+4. **Style** (subcap) — generate ASS with the selected preset, adapted to aspect ratio
+5. **Burn in** (ffmpeg) — re-encode with hardcoded subtitles
 
-Because the text is fixed and only the timing is being solved, alignment is precise even for fast speech, accents, or overlapping audio — conditions that typically break speech-to-text.
+Steps 1, 2, and 5 are wrappers around existing tools. Steps 3 and 4 are what subcap adds. Because the transcript text is fixed and only timing is being solved, alignment stays precise even for fast speech, accents, or noisy audio — conditions that break speech-to-text approaches.
 
 ### Transcript notes
 
