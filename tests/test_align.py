@@ -3,8 +3,58 @@ from pathlib import Path
 
 import pytest
 
-from subcap.align import parse_srt
-from subcap.types import SubtitleEntry
+from subcap.align import parse_srt, _recover_silences, _estimate_speech_duration
+from subcap.types import SubtitleEntry, Word
+
+
+# --- Silence recovery ---
+
+def test_recover_silences_clips_stretched_word():
+    # "Suggest" marked as 3s long — clearly absorbing silence
+    words = [
+        Word(text="one.", start=0.0, end=0.5),
+        Word(text='"Suggest"', start=0.5, end=3.5),
+    ]
+    fixed = _recover_silences(words)
+    assert fixed[0] == words[0]
+    # The stretched word should now have a much shorter duration
+    assert fixed[1].end == 3.5
+    assert fixed[1].start > 0.5
+    # The recovered gap should be > 1.5s
+    assert fixed[1].start - fixed[0].end > 1.5
+
+
+def test_recover_silences_leaves_normal_words():
+    words = [
+        Word(text="hello", start=0.0, end=0.4),
+        Word(text="world", start=0.5, end=0.9),
+    ]
+    fixed = _recover_silences(words)
+    assert fixed == words
+
+
+def test_recover_silences_does_not_overlap_previous_word():
+    # Previous word ends at 5.0, stretched word at 5.0-9.0
+    # Recovered start must not go below 5.0
+    words = [
+        Word(text="end.", start=4.5, end=5.0),
+        Word(text="next", start=5.0, end=9.0),
+    ]
+    fixed = _recover_silences(words)
+    assert fixed[1].start >= 5.0
+
+
+def test_estimate_speech_duration_short_word():
+    assert _estimate_speech_duration("the") < 0.5
+
+
+def test_estimate_speech_duration_long_word():
+    assert _estimate_speech_duration("infinitive") > _estimate_speech_duration("the")
+
+
+def test_estimate_speech_duration_punctuation_only():
+    # Should still return a sensible minimum
+    assert _estimate_speech_duration("...") >= 0.20
 
 
 def _write_srt(content: str, encoding: str = "utf-8") -> str:

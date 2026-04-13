@@ -5,6 +5,7 @@ from subcap.types import SubtitleEntry, Word
 _SENTENCE_ENDS = frozenset(".?!")
 _MAX_DURATION = 8.0
 _GAP = 0.12
+_SILENCE_GAP = 1.2  # if consecutive words have a longer gap, force a subtitle break
 
 
 def _is_sentence_end(word: str) -> bool:
@@ -75,6 +76,11 @@ def segment_words(
         buf.clear()
 
     for word in words:
+        # Long silence before this word — flush so the previous subtitle
+        # ends before the silence rather than spanning it.
+        if buf and word.start - buf[-1].end >= _SILENCE_GAP:
+            flush()
+
         # Check if adding this word would overflow the subtitle.
         candidate = [w.text for w in buf] + [word.text]
         would_overflow = _line_count(candidate, max_chars) > max_lines

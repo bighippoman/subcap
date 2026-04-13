@@ -16,6 +16,35 @@ def test_single_sentence_fits_one_subtitle():
     assert subs[0].text == "Hello world."
 
 
+def test_long_silence_forces_break():
+    # Two words with a 3-second gap between them — different "Question Time"
+    # style breaks shouldn't be spanned by a single subtitle.
+    words = _words([
+        ("Ready", 0.0, 0.4),
+        ("for", 0.5, 0.7),
+        ("question", 0.8, 1.3),
+        ("one", 1.4, 1.7),
+        ("Number", 5.0, 5.4),  # 3.3s gap of silence
+        ("two", 5.5, 5.8),
+    ])
+    subs = segment_words(words, max_chars=80, max_lines=2)
+    assert len(subs) == 2
+    assert subs[0].end == 1.7
+    assert subs[1].start == 5.0
+    # Subtitle 1 must end before silence starts
+    assert subs[0].end < subs[1].start
+
+
+def test_short_gap_does_not_force_break():
+    # 0.5s gap — normal speech pause, should stay in one subtitle
+    words = _words([
+        ("Hello", 0.0, 0.4),
+        ("there", 0.9, 1.2),
+    ])
+    subs = segment_words(words, max_chars=40, max_lines=2)
+    assert len(subs) == 1
+
+
 def test_sentence_boundary_splits():
     words = _words([
         ("First", 0.0, 0.3), ("sentence.", 0.4, 0.8),

@@ -8,6 +8,35 @@ from pathlib import Path
 from subcap.types import SubtitleEntry, Word
 
 
+def _estimate_speech_duration(text: str) -> float:
+    """Plausible upper bound on how long a single word takes to say."""
+    chars = sum(1 for c in text if c.isalpha())
+    return max(0.20, chars * 0.08 + 0.12)
+
+
+def _recover_silences(words: list[Word]) -> list[Word]:
+    """Clip word starts that wav2vec2 stretched over preceding silence.
+
+    wav2vec2's forced alignment hides silences by extending the duration of
+    the next spoken word — a 0.5s word can be marked as 3s long if there's
+    a 2.5s pause before it. This walks each word, and if its duration is
+    much longer than character-count would predict, clips its start time
+    so the silence becomes a real gap that segmentation can act on.
+    """
+    fixed: list[Word] = []
+    for i, w in enumerate(words):
+        actual = w.end - w.start
+        plausible = _estimate_speech_duration(w.text)
+        if actual > plausible * 1.6 and actual > 0.8:
+            new_start = w.end - plausible
+            prev_end = fixed[-1].end if fixed else 0.0
+            new_start = max(new_start, prev_end)
+            fixed.append(Word(text=w.text, start=new_start, end=w.end))
+        else:
+            fixed.append(w)
+    return fixed
+
+
 def align_transcript(
     video_path: str | Path,
     transcript: str,
@@ -62,7 +91,7 @@ def align_transcript(
                         start=float(w["start"]),
                         end=float(w["end"]),
                     ))
-        return words
+        return _recover_silences(words)
     finally:
         Path(wav_path).unlink(missing_ok=True)
 
